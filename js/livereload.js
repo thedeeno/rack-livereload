@@ -124,11 +124,15 @@ __protocol.Parser = Parser = (function() {
 
 // connector
 var Connector, PROTOCOL_6, PROTOCOL_7, Parser, Version, _ref;
-var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
 _ref = __protocol, Parser = _ref.Parser, PROTOCOL_6 = _ref.PROTOCOL_6, PROTOCOL_7 = _ref.PROTOCOL_7;
-Version = '2.0.3';
+
+Version = '2.0.6';
+
 __connector.Connector = Connector = (function() {
+
   function Connector(options, WebSocket, Timer, handlers) {
+    var _this = this;
     this.options = options;
     this.WebSocket = WebSocket;
     this.Timer = Timer;
@@ -138,96 +142,91 @@ __connector.Connector = Connector = (function() {
     this._connectionDesired = false;
     this.protocol = 0;
     this.protocolParser = new Parser({
-      connected: __bind(function(protocol) {
-        this.protocol = protocol;
-        this._handshakeTimeout.stop();
-        this._nextDelay = this.options.mindelay;
-        this._disconnectionReason = 'broken';
-        return this.handlers.connected(protocol);
-      }, this),
-      error: __bind(function(e) {
-        this.handlers.error(e);
-        return this._closeOnError();
-      }, this),
-      message: __bind(function(message) {
-        return this.handlers.message(message);
-      }, this)
+      connected: function(protocol) {
+        _this.protocol = protocol;
+        _this._handshakeTimeout.stop();
+        _this._nextDelay = _this.options.mindelay;
+        _this._disconnectionReason = 'broken';
+        return _this.handlers.connected(protocol);
+      },
+      error: function(e) {
+        _this.handlers.error(e);
+        return _this._closeOnError();
+      },
+      message: function(message) {
+        return _this.handlers.message(message);
+      }
     });
-    this._handshakeTimeout = new Timer(__bind(function() {
-      if (!this._isSocketConnected()) {
-        return;
-      }
-      this._disconnectionReason = 'handshake-timeout';
-      return this.socket.close();
-    }, this));
-    this._reconnectTimer = new Timer(__bind(function() {
-      if (!this._connectionDesired) {
-        return;
-      }
-      return this.connect();
-    }, this));
+    this._handshakeTimeout = new Timer(function() {
+      if (!_this._isSocketConnected()) return;
+      _this._disconnectionReason = 'handshake-timeout';
+      return _this.socket.close();
+    });
+    this._reconnectTimer = new Timer(function() {
+      if (!_this._connectionDesired) return;
+      return _this.connect();
+    });
     this.connect();
   }
+
   Connector.prototype._isSocketConnected = function() {
     return this.socket && this.socket.readyState === this.WebSocket.OPEN;
   };
+
   Connector.prototype.connect = function() {
+    var _this = this;
     this._connectionDesired = true;
-    if (this._isSocketConnected()) {
-      return;
-    }
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-    }
+    if (this._isSocketConnected()) return;
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
     this._disconnectionReason = 'cannot-connect';
     this.protocolParser.reset();
     this.handlers.connecting();
     this.socket = new this.WebSocket(this._uri);
-    this.socket.onopen = __bind(function(e) {
-      return this._onopen(e);
-    }, this);
-    this.socket.onclose = __bind(function(e) {
-      return this._onclose(e);
-    }, this);
-    this.socket.onmessage = __bind(function(e) {
-      return this._onmessage(e);
-    }, this);
-    return this.socket.onerror = __bind(function(e) {
-      return this._onerror(e);
-    }, this);
+    this.socket.onopen = function(e) {
+      return _this._onopen(e);
+    };
+    this.socket.onclose = function(e) {
+      return _this._onclose(e);
+    };
+    this.socket.onmessage = function(e) {
+      return _this._onmessage(e);
+    };
+    return this.socket.onerror = function(e) {
+      return _this._onerror(e);
+    };
   };
+
   Connector.prototype.disconnect = function() {
     this._connectionDesired = false;
     this._reconnectTimer.stop();
-    if (!this._isSocketConnected()) {
-      return;
-    }
+    if (!this._isSocketConnected()) return;
     this._disconnectionReason = 'manual';
     return this.socket.close();
   };
+
   Connector.prototype._scheduleReconnection = function() {
-    if (!this._connectionDesired) {
-      return;
-    }
+    if (!this._connectionDesired) return;
     if (!this._reconnectTimer.running) {
       this._reconnectTimer.start(this._nextDelay);
       return this._nextDelay = Math.min(this.options.maxdelay, this._nextDelay * 2);
     }
   };
+
   Connector.prototype.sendCommand = function(command) {
-    if (this.protocol == null) {
-      return;
-    }
+    if (this.protocol == null) return;
     return this._sendCommand(command);
   };
+
   Connector.prototype._sendCommand = function(command) {
     return this.socket.send(JSON.stringify(command));
   };
+
   Connector.prototype._closeOnError = function() {
     this._handshakeTimeout.stop();
     this._disconnectionReason = 'error';
     return this.socket.close();
   };
+
   Connector.prototype._onopen = function(e) {
     var hello;
     this.handlers.socketConnected();
@@ -237,28 +236,27 @@ __connector.Connector = Connector = (function() {
       protocols: [PROTOCOL_6, PROTOCOL_7]
     };
     hello.ver = Version;
-    if (this.options.ext) {
-      hello.ext = this.options.ext;
-    }
-    if (this.options.extver) {
-      hello.extver = this.options.extver;
-    }
-    if (this.options.snipver) {
-      hello.snipver = this.options.snipver;
-    }
+    if (this.options.ext) hello.ext = this.options.ext;
+    if (this.options.extver) hello.extver = this.options.extver;
+    if (this.options.snipver) hello.snipver = this.options.snipver;
     this._sendCommand(hello);
     return this._handshakeTimeout.start(this.options.handshake_timeout);
   };
+
   Connector.prototype._onclose = function(e) {
     this.protocol = 0;
     this.handlers.disconnected(this._disconnectionReason, this._nextDelay);
     return this._scheduleReconnection();
   };
+
   Connector.prototype._onerror = function(e) {};
+
   Connector.prototype._onmessage = function(e) {
     return this.protocolParser.process(e.data);
   };
+
   return Connector;
+
 })();
 
 // timer
@@ -350,7 +348,7 @@ Options.extract = function(document) {
 
 // reloader
 var IMAGE_STYLES, Reloader, numberOfMatchingSegments, pathFromUrl, pathsMatch, pickBestMatch, splitUrl;
-var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
 splitUrl = function(url) {
   var hash, index, params;
   if ((index = url.indexOf('#')) >= 0) {
@@ -371,6 +369,7 @@ splitUrl = function(url) {
     hash: hash
   };
 };
+
 pathFromUrl = function(url) {
   var path;
   url = splitUrl(url).url;
@@ -381,6 +380,7 @@ pathFromUrl = function(url) {
   }
   return decodeURIComponent(path);
 };
+
 pickBestMatch = function(path, objects, pathFunc) {
   var bestMatch, object, score, _i, _len;
   bestMatch = {
@@ -402,13 +402,12 @@ pickBestMatch = function(path, objects, pathFunc) {
     return null;
   }
 };
+
 numberOfMatchingSegments = function(path1, path2) {
   var comps1, comps2, eqCount, len;
   path1 = path1.replace(/^\/+/, '').toLowerCase();
   path2 = path2.replace(/^\/+/, '').toLowerCase();
-  if (path1 === path2) {
-    return 10000;
-  }
+  if (path1 === path2) return 10000;
   comps1 = path1.split('/').reverse();
   comps2 = path2.split('/').reverse();
   len = Math.min(comps1.length, comps2.length);
@@ -418,9 +417,11 @@ numberOfMatchingSegments = function(path1, path2) {
   }
   return eqCount;
 };
+
 pathsMatch = function(path1, path2) {
   return numberOfMatchingSegments(path1, path2) > 0;
 };
+
 IMAGE_STYLES = [
   {
     selector: 'background',
@@ -430,7 +431,9 @@ IMAGE_STYLES = [
     styleNames: ['borderImage', 'webkitBorderImage', 'MozBorderImage']
   }
 ];
+
 __reloader.Reloader = Reloader = (function() {
+
   function Reloader(window, console, Timer) {
     this.window = window;
     this.console = console;
@@ -440,27 +443,25 @@ __reloader.Reloader = Reloader = (function() {
     this.importCacheWaitPeriod = 200;
     this.plugins = [];
   }
+
   Reloader.prototype.addPlugin = function(plugin) {
     return this.plugins.push(plugin);
   };
+
   Reloader.prototype.analyze = function(callback) {
     return results;
   };
+
   Reloader.prototype.reload = function(path, options) {
     var plugin, _i, _len, _ref;
+    this.options = options;
     _ref = this.plugins;
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
       plugin = _ref[_i];
-      if (plugin.reload && plugin.reload(path, options)) {
-        return;
-      }
+      if (plugin.reload && plugin.reload(path, options)) return;
     }
     if (options.liveCSS) {
-      if (path.match(/\.css$/i)) {
-        if (this.reloadStylesheet(path)) {
-          return;
-        }
-      }
+      if (path.match(/\.css$/i)) if (this.reloadStylesheet(path)) return;
     }
     if (options.liveImg) {
       if (path.match(/\.(jpe?g|png|gif)$/i)) {
@@ -470,9 +471,11 @@ __reloader.Reloader = Reloader = (function() {
     }
     return this.reloadPage();
   };
+
   Reloader.prototype.reloadPage = function() {
     return this.window.document.location.reload();
   };
+
   Reloader.prototype.reloadImages = function(path) {
     var expando, img, selector, styleNames, styleSheet, _i, _j, _k, _l, _len, _len2, _len3, _len4, _ref, _ref2, _ref3, _ref4, _results;
     expando = this.generateUniqueString();
@@ -503,6 +506,7 @@ __reloader.Reloader = Reloader = (function() {
       return _results;
     }
   };
+
   Reloader.prototype.reloadStylesheetImages = function(styleSheet, path, expando) {
     var rule, rules, styleNames, _i, _j, _len, _len2;
     try {
@@ -510,9 +514,7 @@ __reloader.Reloader = Reloader = (function() {
     } catch (e) {
 
     }
-    if (!rules) {
-      return;
-    }
+    if (!rules) return;
     for (_i = 0, _len = rules.length; _i < _len; _i++) {
       rule = rules[_i];
       switch (rule.type) {
@@ -530,25 +532,26 @@ __reloader.Reloader = Reloader = (function() {
       }
     }
   };
+
   Reloader.prototype.reloadStyleImages = function(style, styleNames, path, expando) {
     var newValue, styleName, value, _i, _len;
+    var _this = this;
     for (_i = 0, _len = styleNames.length; _i < _len; _i++) {
       styleName = styleNames[_i];
       value = style[styleName];
       if (typeof value === 'string') {
-        newValue = value.replace(/\burl\s*\(([^)]*)\)/, __bind(function(match, src) {
+        newValue = value.replace(/\burl\s*\(([^)]*)\)/, function(match, src) {
           if (pathsMatch(path, pathFromUrl(src))) {
-            return "url(" + (this.generateCacheBustUrl(src, expando)) + ")";
+            return "url(" + (_this.generateCacheBustUrl(src, expando)) + ")";
           } else {
             return match;
           }
-        }, this));
-        if (newValue !== value) {
-          style[styleName] = newValue;
-        }
+        });
+        if (newValue !== value) style[styleName] = newValue;
       }
     }
   };
+
   Reloader.prototype.reloadStylesheet = function(path) {
     var imported, link, links, match, style, _i, _j, _k, _len, _len2, _len3, _ref;
     links = (function() {
@@ -596,6 +599,7 @@ __reloader.Reloader = Reloader = (function() {
     }
     return true;
   };
+
   Reloader.prototype.collectImportedStylesheets = function(link, styleSheet, result) {
     var index, rule, rules, _len;
     try {
@@ -624,11 +628,10 @@ __reloader.Reloader = Reloader = (function() {
       }
     }
   };
+
   Reloader.prototype.reattachStylesheetLink = function(link) {
     var clone, parent, timer;
-    if (link.__LiveReload_pendingRemoval) {
-      return;
-    }
+    if (link.__LiveReload_pendingRemoval) return;
     link.__LiveReload_pendingRemoval = true;
     clone = link.cloneNode(false);
     clone.href = this.generateCacheBustUrl(link.href);
@@ -639,14 +642,14 @@ __reloader.Reloader = Reloader = (function() {
       parent.insertBefore(clone, link.nextSibling);
     }
     timer = new this.Timer(function() {
-      if (link.parentNode) {
-        return link.parentNode.removeChild(link);
-      }
+      if (link.parentNode) return link.parentNode.removeChild(link);
     });
     return timer.start(this.stylesheetGracePeriod);
   };
+
   Reloader.prototype.reattachImportedRule = function(_arg) {
     var href, index, link, media, newRule, parent, rule, tempLink;
+    var _this = this;
     rule = _arg.rule, index = _arg.index, link = _arg.link;
     parent = rule.parentStyleSheet;
     href = this.generateCacheBustUrl(rule.href);
@@ -657,38 +660,35 @@ __reloader.Reloader = Reloader = (function() {
     tempLink.rel = 'stylesheet';
     tempLink.href = href;
     tempLink.__LiveReload_pendingRemoval = true;
-    if (link.parentNode) {
-      link.parentNode.insertBefore(tempLink, link);
-    }
-    return this.Timer.start(this.importCacheWaitPeriod, __bind(function() {
-      if (tempLink.parentNode) {
-        tempLink.parentNode.removeChild(tempLink);
-      }
-      if (rule.__LiveReload_newHref !== href) {
-        return;
-      }
+    if (link.parentNode) link.parentNode.insertBefore(tempLink, link);
+    return this.Timer.start(this.importCacheWaitPeriod, function() {
+      if (tempLink.parentNode) tempLink.parentNode.removeChild(tempLink);
+      if (rule.__LiveReload_newHref !== href) return;
       parent.insertRule(newRule, index);
       parent.deleteRule(index + 1);
       rule = parent.cssRules[index];
       rule.__LiveReload_newHref = href;
-      return this.Timer.start(this.importCacheWaitPeriod, __bind(function() {
-        if (rule.__LiveReload_newHref !== href) {
-          return;
-        }
+      return _this.Timer.start(_this.importCacheWaitPeriod, function() {
+        if (rule.__LiveReload_newHref !== href) return;
         parent.insertRule(newRule, index);
         return parent.deleteRule(index + 1);
-      }, this));
-    }, this));
+      });
+    });
   };
+
   Reloader.prototype.generateUniqueString = function() {
     return 'livereload=' + Date.now();
   };
+
   Reloader.prototype.generateCacheBustUrl = function(url, expando) {
     var hash, oldParams, params, _ref;
-    if (expando == null) {
-      expando = this.generateUniqueString();
-    }
+    if (expando == null) expando = this.generateUniqueString();
     _ref = splitUrl(url), url = _ref.url, hash = _ref.hash, oldParams = _ref.params;
+    if (this.options.overrideURL) {
+      if (url.indexOf(this.options.serverURL) < 0) {
+        url = this.options.serverURL + this.options.overrideURL + "?url=" + encodeURIComponent(url);
+      }
+    }
     params = oldParams.replace(/(\?|&)livereload=(\d+)/, function(match, sep) {
       return "" + sep + expando;
     });
@@ -701,23 +701,31 @@ __reloader.Reloader = Reloader = (function() {
     }
     return url + params + hash;
   };
+
   return Reloader;
+
 })();
 
 // livereload
 var Connector, LiveReload, Options, Reloader, Timer;
-var __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
 Connector = __connector.Connector;
+
 Timer = __timer.Timer;
+
 Options = __options.Options;
+
 Reloader = __reloader.Reloader;
+
 __livereload.LiveReload = LiveReload = (function() {
+
   function LiveReload(window) {
+    var _this = this;
     this.window = window;
     this.listeners = {};
     this.plugins = [];
     this.pluginIdentifiers = {};
-    this.console = this.window.console && this.window.console.log && this.window.console.error ? this.window.console : {
+    this.console = this.window.location.href.match(/LR-verbose/) && this.window.console && this.window.console.log && this.window.console.error ? this.window.console : {
       log: function() {},
       error: function() {}
     };
@@ -731,87 +739,95 @@ __livereload.LiveReload = LiveReload = (function() {
     }
     this.reloader = new Reloader(this.window, this.console, Timer);
     this.connector = new Connector(this.options, this.WebSocket, Timer, {
-      connecting: __bind(function() {}, this),
-      socketConnected: __bind(function() {}, this),
-      connected: __bind(function(protocol) {
+      connecting: function() {},
+      socketConnected: function() {},
+      connected: function(protocol) {
         var _base;
-        if (typeof (_base = this.listeners).connect === "function") {
+        if (typeof (_base = _this.listeners).connect === "function") {
           _base.connect();
         }
-        this.log("LiveReload is connected to " + this.options.host + ":" + this.options.port + " (protocol v" + protocol + ").");
-        return this.analyze();
-      }, this),
-      error: __bind(function(e) {
+        _this.log("LiveReload is connected to " + _this.options.host + ":" + _this.options.port + " (protocol v" + protocol + ").");
+        return _this.analyze();
+      },
+      error: function(e) {
         if (e instanceof ProtocolError) {
           return console.log("" + e.message + ".");
         } else {
           return console.log("LiveReload internal error: " + e.message);
         }
-      }, this),
-      disconnected: __bind(function(reason, nextDelay) {
+      },
+      disconnected: function(reason, nextDelay) {
         var _base;
-        if (typeof (_base = this.listeners).disconnect === "function") {
+        if (typeof (_base = _this.listeners).disconnect === "function") {
           _base.disconnect();
         }
         switch (reason) {
           case 'cannot-connect':
-            return this.log("LiveReload cannot connect to " + this.options.host + ":" + this.options.port + ", will retry in " + nextDelay + " sec.");
+            return _this.log("LiveReload cannot connect to " + _this.options.host + ":" + _this.options.port + ", will retry in " + nextDelay + " sec.");
           case 'broken':
-            return this.log("LiveReload disconnected from " + this.options.host + ":" + this.options.port + ", reconnecting in " + nextDelay + " sec.");
+            return _this.log("LiveReload disconnected from " + _this.options.host + ":" + _this.options.port + ", reconnecting in " + nextDelay + " sec.");
           case 'handshake-timeout':
-            return this.log("LiveReload cannot connect to " + this.options.host + ":" + this.options.port + " (handshake timeout), will retry in " + nextDelay + " sec.");
+            return _this.log("LiveReload cannot connect to " + _this.options.host + ":" + _this.options.port + " (handshake timeout), will retry in " + nextDelay + " sec.");
           case 'handshake-failed':
-            return this.log("LiveReload cannot connect to " + this.options.host + ":" + this.options.port + " (handshake failed), will retry in " + nextDelay + " sec.");
+            return _this.log("LiveReload cannot connect to " + _this.options.host + ":" + _this.options.port + " (handshake failed), will retry in " + nextDelay + " sec.");
           case 'manual':
             break;
           case 'error':
             break;
           default:
-            return this.log("LiveReload disconnected from " + this.options.host + ":" + this.options.port + " (" + reason + "), reconnecting in " + nextDelay + " sec.");
+            return _this.log("LiveReload disconnected from " + _this.options.host + ":" + _this.options.port + " (" + reason + "), reconnecting in " + nextDelay + " sec.");
         }
-      }, this),
-      message: __bind(function(message) {
+      },
+      message: function(message) {
         switch (message.command) {
           case 'reload':
-            return this.performReload(message);
+            return _this.performReload(message);
           case 'alert':
-            return this.performAlert(message);
+            return _this.performAlert(message);
         }
-      }, this)
+      }
     });
   }
+
   LiveReload.prototype.on = function(eventName, handler) {
     return this.listeners[eventName] = handler;
   };
+
   LiveReload.prototype.log = function(message) {
     return this.console.log("" + message);
   };
+
   LiveReload.prototype.performReload = function(message) {
     var _ref, _ref2;
     this.log("LiveReload received reload request for " + message.path + ".");
     return this.reloader.reload(message.path, {
       liveCSS: (_ref = message.liveCSS) != null ? _ref : true,
       liveImg: (_ref2 = message.liveImg) != null ? _ref2 : true,
-      originalPath: message.originalPath || ''
+      originalPath: message.originalPath || '',
+      overrideURL: message.overrideURL || '',
+      serverURL: "http://" + this.options.host + ":" + this.options.port
     });
   };
+
   LiveReload.prototype.performAlert = function(message) {
     return alert(message.message);
   };
+
   LiveReload.prototype.shutDown = function() {
     var _base;
     this.connector.disconnect();
     this.log("LiveReload disconnected.");
     return typeof (_base = this.listeners).shutdown === "function" ? _base.shutdown() : void 0;
   };
+
   LiveReload.prototype.hasPlugin = function(identifier) {
     return !!this.pluginIdentifiers[identifier];
   };
+
   LiveReload.prototype.addPlugin = function(pluginClass) {
     var plugin;
-    if (this.hasPlugin(pluginClass.identifier)) {
-      return;
-    }
+    var _this = this;
+    if (this.hasPlugin(pluginClass.identifier)) return;
     this.pluginIdentifiers[pluginClass.identifier] = true;
     plugin = new pluginClass(this.window, {
       _livereload: this,
@@ -819,18 +835,17 @@ __livereload.LiveReload = LiveReload = (function() {
       _connector: this.connector,
       console: this.console,
       Timer: Timer,
-      generateCacheBustUrl: __bind(function(url) {
-        return this.reloader.generateCacheBustUrl(url);
-      }, this)
+      generateCacheBustUrl: function(url) {
+        return _this.reloader.generateCacheBustUrl(url);
+      }
     });
     this.plugins.push(plugin);
     this.reloader.addPlugin(plugin);
   };
+
   LiveReload.prototype.analyze = function() {
     var plugin, pluginData, pluginsData, _i, _len, _ref;
-    if (!(this.connector.protocol >= 7)) {
-      return;
-    }
+    if (!(this.connector.protocol >= 7)) return;
     pluginsData = {};
     _ref = this.plugins;
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
@@ -844,7 +859,9 @@ __livereload.LiveReload = LiveReload = (function() {
       url: this.window.location.href
     });
   };
+
   return LiveReload;
+
 })();
 
 // less
@@ -901,13 +918,12 @@ __less = LessPlugin = (function() {
 })();
 
 // startup
-var CustomEvents, LiveReload, k, v;
+var CustomEvents, LiveReload, k;
 CustomEvents = __customevents;
 LiveReload = window.LiveReload = new (__livereload.LiveReload)(window);
 for (k in window) {
-  v = window[k];
   if (k.match(/^LiveReloadPlugin/)) {
-    LiveReload.addPlugin(v);
+    LiveReload.addPlugin(window[k]);
   }
 }
 LiveReload.addPlugin(__less);
